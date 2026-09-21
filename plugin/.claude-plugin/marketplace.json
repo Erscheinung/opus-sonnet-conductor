@@ -1,0 +1,14 @@
+{
+  "name": "orchestrator-budget-marketplace",
+  "description": "Local marketplace hosting the orchestrator-budget plugin (provider spend + daily task soft-gate) for the adaptive Opus/Sonnet orchestrator.",
+  "owner": {
+    "name": "opus-sonnet-orchestrator"
+  },
+  "plugins": [
+    {
+      "name": "orchestrator-budget",
+      "source": "./",
+      "description": "provider spend in context + status line, live background refresher, and a daily task-budget soft-gate."
+    }
+  ]
+}

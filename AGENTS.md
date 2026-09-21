@@ -1,31 +1,45 @@
 # Adaptive orchestration
 
-Route work by actual complexity. Default to Sonnet. Use Opus only when the task genuinely requires hard planning, cross-file architecture, or diagnosis without a clear starting point.
+Route work by actual complexity across three model tiers. The primary Opus session owns scope, decisions, delegation, and synthesis — not routine reading or routine implementation.
 
-## Model routing
+## Tiers
 
-**Opus** — hard planning, ambiguous diagnosis, synthesizing large context into a concrete plan, architecture decisions with real consequences.
+- **Haiku** (`haiku-reader` agent) — locating symbols, mapping files, summarizing config, gathering context. Route reads here before planning; do not burn Opus context locating things.
+- **Sonnet** (`sonnet-worker` = high effort, `sonnet-worker-lite` = medium) — bounded implementation with testable acceptance criteria. The variant is the effort lever (effort is fixed per agent definition; no per-call override).
+- **Opus** (this session) — hard planning, ambiguous diagnosis, architecture, turning a vague brief into a scoped plan, delegating, synthesizing worker reports.
 
-**Sonnet** — bounded implementation, writing, editing, follow-a-plan tasks, anything with concrete and unambiguous acceptance criteria.
+Model and effort are pinned in `.claude/agents/*.md`.
 
-**Haiku** — file reading, locating symbols, quick isolated edits, context gathering.
+## Information diet
 
-## Delegation
+The discipline that keeps this cheap, both directions:
 
-For non-trivial implementation that benefits from a fresh context, spawn one bounded Sonnet worker. Start it with `fork_turns="none"` equivalent: a complete self-contained prompt, not the parent conversation.
+- **Briefs out stay minimal.** A worker cannot see this conversation and must not. Give only its scoped brief. Never fork parent context for routine delegation — a worker starting from a full transcript overthinks. Inherit context only when the user explicitly asks.
+- **Reports in stay minimal.** Read only the worker's report (what changed / files / validation / risks). Do not read its transcript, do not independently review its code. Accept the report and its validation. Review worker code only after the user reports a bug and asks for diagnosis.
 
-Every delegation prompt states: concrete outcome, exact scope, constraints, acceptance criteria, and any commands or paths the worker needs. Write it as a brief to a capable teammate who cannot see this conversation.
+## Delegation brief
 
-Do not impose a fixed pipeline. Do not auto-spawn a reviewer. Review worker output only when the user reports a bug and asks for diagnosis.
+Write as if briefing a capable teammate who cannot see this conversation. State: the outcome and why, the exact owned files, constraints and guardrails, the context the worker needs (concrete errors/commands/paths), and a **binary pass gate** — testable acceptance criteria plus the focused validation to run. The worker reports done only when every criterion passes, else reports the blocker. Removing ambiguity at the brief level is what makes fixed effort sufficient.
 
-If a subagent disconnects before completion, send one `continue` follow-up. Do not loop.
+Give each worker a descriptive name (`/agents` to watch live). One bounded worker owns one scope. Do not impose an explorer → worker → tester → reviewer pipeline. Do not auto-spawn a reviewer. If a worker disconnects before reporting, send one `continue`; do not loop.
 
-## What not to do
+## Checkpoints
 
-Do not use Opus for work Sonnet can handle. Do not create an automatic review stage. Do not share full parent history with a worker unless explicitly asked.
+After each delegated task, record a checkpoint so a session can stop and resume cheaply. The store is set at setup in `.claude/orchestrator-checkpoints` (`beads` or `markdown`) — read it and use only that store.
 
-## Context hygiene
+- `beads`: `bd q "<task>"` at start, `bd close <id> --reason "<what shipped>"` on completion, `bd link` for dependencies, `bd list`/`bd show` to resume.
+- `markdown`: append one terse row per task to `CHECKPOINT.md` (task, scope, files, status, next step).
 
-Disable MCP plugins not actively needed. Watch the context meter — past ~50% full, wrap the task or hand off to a fresh worker. Keep CLAUDE.md and AGENTS.md instructions concise; they load on every turn.
+## Budget
+
+A cost hook injects live provider spend each turn and warns when the day crosses the task cap (default 45 EUR, soft-gate). On the task-cap warning: finish or safely stop the current worker, record a checkpoint, surface where the work stands and how to resume, then hold until the user says continue. Below the cap, prefer `sonnet-worker-lite` and Haiku reads for cheap work; reserve high effort and Opus thinking for what needs it.
+
+## Override
+
+`/no-subagents` toggles delegation off (marker `.claude/orchestrator-no-subagents`). While set, do all work inline — no readers, no workers. Run it again to restore delegation. Check the marker before delegating.
+
+## Output optimizer
+
+Keep caveman ultra on: it compresses visible output style, never technical substance (code, commands, API names, error strings stay verbatim).
 
 User instructions always take precedence.
