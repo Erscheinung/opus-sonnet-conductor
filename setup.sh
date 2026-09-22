@@ -42,9 +42,28 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# GUI (non-interactive) mode: driven by env vars, never calls read.
+NONINTERACTIVE="${GUI_NONINTERACTIVE:-0}"
+OVERWRITE="${GUI_OVERWRITE:-0}"
+
+# want_component <token>: true if token should be installed given GUI_COMPONENTS
+# (present in the list, or list empty/unset = install all).
+want_component() {
+  local token="$1" list="${GUI_COMPONENTS:-}"
+  [[ -z "$list" ]] && return 0
+  case ",$list," in
+    *",$token,"*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 if [[ -z "$TARGET" ]]; then
-  read -rp "Target project directory (Enter for current directory): " TARGET
-  TARGET="${TARGET:-$PWD}"
+  if [[ "$NONINTERACTIVE" == "1" ]]; then
+    TARGET="$PWD"
+  else
+    read -rp "Target project directory (Enter for current directory): " TARGET
+    TARGET="${TARGET:-$PWD}"
+  fi
 fi
 
 TARGET="$(eval echo "$TARGET")"  # expand ~
@@ -69,6 +88,15 @@ install_skill() {
   local src="$1" name="$2" dest="$TARGET/.claude/skills/$2"
   mkdir -p "$dest"
   if [[ -f "$dest/SKILL.md" ]]; then
+    if [[ "$NONINTERACTIVE" == "1" ]]; then
+      if [[ "$OVERWRITE" != "1" ]]; then
+        echo "  Skipped skill '$name' (exists)."
+        return
+      fi
+      cp "$src" "$dest/SKILL.md"
+      echo "  Replaced: $dest/SKILL.md"
+      return
+    fi
     read -rp "  $dest/SKILL.md already exists. Overwrite? [y/N] " CONFIRM
     if [[ "$(lc "$CONFIRM")" != "y" ]]; then
       echo "  Skipped skill '$name'."
@@ -84,8 +112,8 @@ install_skill() {
 
 # --- skills ------------------------------------------------------------------
 
-install_skill "$SKILL_SRC" "adaptive-orchestrator"
-install_skill "$NOSUB_SRC" "no-subagents"
+want_component "adaptive-orchestrator" && install_skill "$SKILL_SRC" "adaptive-orchestrator"
+want_component "no-subagents" && install_skill "$NOSUB_SRC" "no-subagents"
 
 # --- subagent definitions ----------------------------------------------------
 
@@ -93,23 +121,98 @@ AGENTS_DEST_DIR="$TARGET/.claude/agents"
 mkdir -p "$AGENTS_DEST_DIR"
 for f in "$AGENTS_DIR_SRC"/*.md; do
   base="$(basename "$f")"
+  token="${base%.md}"
+  want_component "$token" || continue
   if [[ -f "$AGENTS_DEST_DIR/$base" ]]; then
-    read -rp "  agent $base already exists. Overwrite? [y/N] " CONFIRM
-    if [[ "$(lc "$CONFIRM")" != "y" ]]; then echo "  Skipped agent $base."; continue; fi
+    if [[ "$NONINTERACTIVE" == "1" ]]; then
+      if [[ "$OVERWRITE" != "1" ]]; then echo "  Skipped agent $base (exists)."; continue; fi
+    else
+      read -rp "  agent $base already exists. Overwrite? [y/N] " CONFIRM
+      if [[ "$(lc "$CONFIRM")" != "y" ]]; then echo "  Skipped agent $base."; continue; fi
+    fi
   fi
   cp "$f" "$AGENTS_DEST_DIR/$base"
   echo "  Installed agent: .claude/agents/$base"
 done
+
+# --- gateway model-pin -------------------------------------------------------
+# On machines using a provider-style gateway, bare aliases like "model: sonnet"
+# have no mapping and silently fall back to the session model, defeating cost
+# tiering.  Rewrite installed agent frontmatter to the exact model IDs that the
+# gateway maps, iff modelOverrides in settings.json contains those keys.
+
+maybe_pin_gateway_models() {
+  local agents_dir="$1"
+
+  # Locate settings.json: prefer target-local, fall back to home.
+  local settings=""
+  if [[ -f "$TARGET/.claude/settings.json" ]]; then
+    settings="$TARGET/.claude/settings.json"
+  elif [[ -f "$HOME/.claude/settings.json" ]]; then
+    settings="$HOME/.claude/settings.json"
+  else
+    return 0
+  fi
+
+  # Requires node for reliable JSON parsing.
+  if ! command -v node >/dev/null 2>&1; then
+    echo "  (node not found; leaving model aliases as-is)"
+    return 0
+  fi
+
+  # Determine which model-family pins are available from modelOverrides keys.
+  local sonnet_pin haiku_pin
+  sonnet_pin="$(node -e "
+    try {
+      var o = JSON.parse(require('fs').readFileSync('$settings','utf8'));
+      var m = o.modelOverrides || {};
+      if (Object.prototype.hasOwnProperty.call(m,'claude-sonnet-4-6'))
+        process.stdout.write('claude-sonnet-4-6');
+    } catch(e) {}
+  " 2>/dev/null)"
+
+  haiku_pin="$(node -e "
+    try {
+      var o = JSON.parse(require('fs').readFileSync('$settings','utf8'));
+      var m = o.modelOverrides || {};
+      if (Object.prototype.hasOwnProperty.call(m,'claude-haiku-4-5'))
+        process.stdout.write('claude-haiku-4-5');
+    } catch(e) {}
+  " 2>/dev/null)"
+
+  # Nothing to do if neither pin resolved.
+  [[ -z "$sonnet_pin" && -z "$haiku_pin" ]] && return 0
+
+  # Rewrite frontmatter model: lines in each installed agent file.
+  for f in "$agents_dir"/*.md; do
+    [[ -f "$f" ]] || continue
+    local base; base="$(basename "$f")"
+    if [[ -n "$sonnet_pin" ]] && grep -q "^model: sonnet$" "$f" 2>/dev/null; then
+      sed -i '' -e "s/^model: sonnet$/model: $sonnet_pin/" "$f"
+      echo "  Pinned $base model -> $sonnet_pin (gateway modelOverrides detected)"
+    elif [[ -n "$haiku_pin" ]] && grep -q "^model: haiku$" "$f" 2>/dev/null; then
+      sed -i '' -e "s/^model: haiku$/model: $haiku_pin/" "$f"
+      echo "  Pinned $base model -> $haiku_pin (gateway modelOverrides detected)"
+    fi
+  done
+}
+
+maybe_pin_gateway_models "$AGENTS_DEST_DIR"
 
 # --- checkpoint store choice -------------------------------------------------
 
 if [[ -z "$CHECKPOINTS" ]]; then
   echo ""
   if command -v bd >/dev/null 2>&1; then
-    echo "  Checkpoint store: 'beads' (bd detected — structured, dependency-aware,"
-    echo "  resumable) or 'markdown' (single CHECKPOINT.md ledger, zero-dependency)."
-    read -rp "  Choose [beads/markdown] (default beads): " CHECKPOINTS
-    CHECKPOINTS="${CHECKPOINTS:-beads}"
+    if [[ "$NONINTERACTIVE" == "1" ]]; then
+      CHECKPOINTS="beads"
+      echo "  'bd' detected — using 'beads' checkpoint store."
+    else
+      echo "  Checkpoint store: 'beads' (bd detected — structured, dependency-aware,"
+      echo "  resumable) or 'markdown' (single CHECKPOINT.md ledger, zero-dependency)."
+      read -rp "  Choose [beads/markdown] (default beads): " CHECKPOINTS
+      CHECKPOINTS="${CHECKPOINTS:-beads}"
+    fi
   else
     echo "  'bd' (beads) not found on PATH. Using 'markdown' checkpoint ledger."
     echo "  (Install beads and re-run with --checkpoints beads to switch.)"
@@ -139,7 +242,11 @@ if [[ -f "$AGENTS_DEST" ]]; then
   if grep -q "$ROUTING_MARKER" "$AGENTS_DEST"; then
     echo "  Routing rules already present in $AGENTS_DEST — skipped."
   else
-    read -rp "  Append routing rules to existing $AGENTS_DEST? [Y/n] " CONFIRM
+    if [[ "$NONINTERACTIVE" == "1" ]]; then
+      CONFIRM="y"
+    else
+      read -rp "  Append routing rules to existing $AGENTS_DEST? [Y/n] " CONFIRM
+    fi
     if [[ "$(lc "$CONFIRM")" == "n" ]]; then
       echo "  Skipped AGENTS.md."
     else
@@ -160,12 +267,21 @@ fi
 # --- optional cost plugin ----------------------------------------------------
 
 echo ""
-read -rp "  Install the vendored orchestrator-budget cost plugin (provider spend + task cap)? [y/N] " CONFIRM
+if [[ "$NONINTERACTIVE" == "1" ]]; then
+  CONFIRM="${GUI_COST_HOOK:-0}"
+  [[ "$CONFIRM" == "1" ]] && CONFIRM="y" || CONFIRM="n"
+else
+  read -rp "  Install the vendored orchestrator-budget cost plugin (provider spend + task cap)? [y/N] " CONFIRM
+fi
 if [[ "$(lc "$CONFIRM")" == "y" ]]; then
   PLUGIN_DEST="$TARGET/.claude/plugins/orchestrator-budget"
   if [[ -d "$PLUGIN_DEST" ]]; then
-    read -rp "  $PLUGIN_DEST exists. Overwrite? [y/N] " C2
-    if [[ "$(lc "$C2")" != "y" ]]; then echo "  Skipped plugin."; else rm -rf "$PLUGIN_DEST"; cp -R "$PLUGIN_SRC" "$PLUGIN_DEST"; echo "  Installed plugin: $PLUGIN_DEST"; fi
+    if [[ "$NONINTERACTIVE" == "1" ]]; then
+      if [[ "$OVERWRITE" != "1" ]]; then echo "  Skipped plugin (exists)."; else rm -rf "$PLUGIN_DEST"; cp -R "$PLUGIN_SRC" "$PLUGIN_DEST"; echo "  Installed plugin: $PLUGIN_DEST"; fi
+    else
+      read -rp "  $PLUGIN_DEST exists. Overwrite? [y/N] " C2
+      if [[ "$(lc "$C2")" != "y" ]]; then echo "  Skipped plugin."; else rm -rf "$PLUGIN_DEST"; cp -R "$PLUGIN_SRC" "$PLUGIN_DEST"; echo "  Installed plugin: $PLUGIN_DEST"; fi
+    fi
   else
     mkdir -p "$(dirname "$PLUGIN_DEST")"
     cp -R "$PLUGIN_SRC" "$PLUGIN_DEST"
@@ -188,6 +304,7 @@ if $GLOBAL; then
   cp "$SKILL_SRC" "$GLOBAL_SKILLS/adaptive-orchestrator/SKILL.md"
   cp "$NOSUB_SRC" "$GLOBAL_SKILLS/no-subagents/SKILL.md"
   for f in "$AGENTS_DIR_SRC"/*.md; do cp "$f" "$GLOBAL_AGENTS/$(basename "$f")"; done
+  maybe_pin_gateway_models "$GLOBAL_AGENTS"
   echo "  Installed skill + no-subagents + agents globally."
   echo "  Merge AGENTS.md routing rules into ~/.claude/CLAUDE.md manually if you want them everywhere."
 fi
