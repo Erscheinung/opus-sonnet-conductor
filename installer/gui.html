@@ -345,6 +345,65 @@
     margin-top: 20px;
   }
 
+  /* ---- scope bar + sub-heads ---- */
+  .scope-bar {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    border: 2px solid var(--rule);
+    padding: 12px 14px;
+    margin-bottom: 20px;
+  }
+  .mono-note {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--ink-3);
+    word-break: break-all;
+  }
+  .sub-head {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-top: 28px;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--rule);
+  }
+  .context-panel {
+    margin-top: 14px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    display: none;
+  }
+  .context-panel.show { display: block; }
+  .ctx-total {
+    font-size: 13px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    margin-bottom: 12px;
+  }
+  .ctx-row {
+    display: grid;
+    grid-template-columns: 1fr auto 56px;
+    gap: 12px;
+    align-items: center;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--rule-soft);
+  }
+  .ctx-bar {
+    grid-column: 1 / -1;
+    height: 6px;
+    background: var(--paper-2);
+    border: 1px solid var(--rule-soft);
+  }
+  .ctx-bar > span {
+    display: block;
+    height: 100%;
+    background: var(--m-sonnet);
+  }
+
   .result-ok {
     border: 2px solid var(--m-haiku);
     color: var(--m-haiku);
@@ -473,6 +532,13 @@
         <p class="lede">Each loaded MCP server and plugin costs context every message. Toggle off what this machine does not need. Changes write Claude Code config directly; nothing is deleted.</p>
       </div>
 
+      <div class="scope-bar">
+        <span class="row-label" style="margin:0">Scope</span>
+        <div id="scope-chips" class="chips" role="radiogroup" aria-label="Config scope"></div>
+        <button id="scope-browse" class="btn" type="button">BROWSE DIR&hellip;</button>
+        <span id="scope-path" class="mono-note"></span>
+      </div>
+
       <div class="cols">
         <div>
           <div class="col-head">
@@ -493,6 +559,18 @@
       <div class="callout-danger">
         &#9888; Disabling an MCP mid-session needs a Claude Code restart to take effect.
       </div>
+
+      <div class="sub-head">
+        <span class="row-label" style="margin:0">CLAUDE.md &amp; settings at this scope</span>
+      </div>
+      <div id="claudemd-list" class="list"></div>
+
+      <div class="sub-head">
+        <span class="row-label" style="margin:0">Context usage</span>
+        <button id="context-btn" class="btn" type="button">MEASURE CONTEXT</button>
+      </div>
+      <p class="lede" style="margin:8px 0 0">Runs <code>claude --print /context</code> for the selected scope and shows the token breakdown. May take up to a minute.</p>
+      <div id="context-panel" class="context-panel" aria-live="polite"></div>
     </section>
 
     <!-- SECTION 3 : STATUS / FOOTER -->
@@ -513,6 +591,18 @@
 
 /* ---------------- state ---------------- */
 let STATE = null;
+let SCOPE = "global";      // "global" | "dir"
+let SCOPE_DIR = null;      // absolute path when SCOPE === "dir"
+
+function scopeQuery() {
+  if (SCOPE === "dir" && SCOPE_DIR) {
+    return "?scope=dir&dir=" + encodeURIComponent(SCOPE_DIR);
+  }
+  return "?scope=global";
+}
+function scopeBody() {
+  return SCOPE === "dir" && SCOPE_DIR ? { scope: "dir", directory: SCOPE_DIR } : { scope: "global" };
+}
 
 /* ---------------- helpers ---------------- */
 const $ = (sel) => document.querySelector(sel);
@@ -694,7 +784,7 @@ async function toggleMcp(server, toggle, statusEl) {
   // optimistic
   setMcpVisual(toggle, statusEl, !nextDisabled);
   try {
-    const res = await api("/api/toggle-mcp", { name: server.name, disabled: nextDisabled });
+    const res = await api("/api/toggle-mcp", Object.assign({ name: server.name, disabled: nextDisabled }, scopeBody()));
     if (!res || res.ok === false) throw new Error(res && res.error ? res.error : "toggle failed");
     server.disabled = nextDisabled;
     hideBanner();
@@ -745,7 +835,7 @@ async function togglePlugin(plugin, toggle, statusEl) {
   const nextEnabled = !wasEnabled;
   setMcpVisual(toggle, statusEl, nextEnabled);    // same visual helper
   try {
-    const res = await api("/api/toggle-plugin", { id: plugin.id, enabled: nextEnabled });
+    const res = await api("/api/toggle-plugin", Object.assign({ id: plugin.id, enabled: nextEnabled }, scopeBody()));
     if (!res || res.ok === false) throw new Error(res && res.error ? res.error : "toggle failed");
     plugin.enabled = nextEnabled;
     hideBanner();
@@ -779,15 +869,155 @@ function renderAll(state) {
   renderComponents(state.components);
   renderCheckpoints(!!state.bd);
   renderCostHook(state.costHook);
+  renderScopeBar(state);
   renderMcp(state.mcpServers);
   renderPlugins(state.plugins);
   renderFooter(state);
+  loadClaudeMd();
+}
+
+/* ---------------- render: scope bar ---------------- */
+function renderScopeBar(state) {
+  const box = $("#scope-chips");
+  if (!box) return;
+  clear(box);
+
+  const mk = (label, active, on) => {
+    const chip = el("button", {
+      type: "button",
+      class: "chip" + (active ? " active" : ""),
+      role: "radio",
+      "aria-checked": String(active),
+      text: label,
+    });
+    chip.addEventListener("click", on);
+    return chip;
+  };
+
+  box.appendChild(mk("GLOBAL", SCOPE === "global", () => {
+    SCOPE = "global"; SCOPE_DIR = null; loadState();
+  }));
+  if (SCOPE === "dir" && SCOPE_DIR) {
+    const short = SCOPE_DIR.replace(/^.*\//, "") || SCOPE_DIR;
+    box.appendChild(mk("DIR: " + short, true, () => {}));
+  }
+  const pathEl = $("#scope-path");
+  if (pathEl) pathEl.textContent = SCOPE === "dir" && SCOPE_DIR ? SCOPE_DIR : "~/.claude.json · ~/.claude/settings.json";
+}
+
+async function browseScopeDir() {
+  try {
+    const res = await api("/api/pick-folder", {});
+    if (res && res.ok && res.path) {
+      SCOPE = "dir";
+      SCOPE_DIR = res.path.replace(/\/$/, "");
+      hideBanner();
+      loadState();
+    } else if (res && res.canceled) {
+      // no-op
+    } else {
+      showBanner("Folder picker failed" + (res && res.error ? ": " + res.error : ""));
+    }
+  } catch (e) {
+    showBanner("Backend not reachable — " + e.message);
+  }
+}
+
+/* ---------------- render: CLAUDE.md ---------------- */
+async function loadClaudeMd() {
+  const box = $("#claudemd-list");
+  if (!box) return;
+  clear(box);
+  box.appendChild(el("div", { class: "item" }, [el("span", { class: "muted mono", text: "loading…" })]));
+  try {
+    const res = await api("/api/claude-md" + scopeQuery());
+    clear(box);
+    const files = (res && res.files) || [];
+    if (!files.length) {
+      box.appendChild(el("div", { class: "item" }, [el("span", { class: "muted mono", text: "none at this scope" })]));
+      return;
+    }
+    files.forEach((f) => {
+      const meta = el("div", { class: "grow" }, [
+        el("span", { class: "path", text: f.label + " · " + f.path }),
+      ]);
+      let status;
+      if (f.exists) {
+        status = pill("enabled", "●", (f.lines || 0) + " LINES");
+      } else {
+        status = pill("disabled", "○", "ABSENT");
+      }
+      const kids = [meta, status];
+      if (f.exists) {
+        const openBtn = el("button", { type: "button", class: "btn", text: "OPEN" });
+        openBtn.addEventListener("click", () => openFile(f.path));
+        kids.push(openBtn);
+      }
+      box.appendChild(el("div", { class: "item" }, kids));
+    });
+  } catch (e) {
+    clear(box);
+    box.appendChild(el("div", { class: "item" }, [el("span", { class: "muted mono", text: "error: " + e.message })]));
+  }
+}
+
+async function openFile(path) {
+  try {
+    const res = await api("/api/open", { path });
+    if (!res || res.ok === false) showBanner("Could not open " + path + (res && res.error ? ": " + res.error : ""));
+    else hideBanner();
+  } catch (e) {
+    showBanner("Backend not reachable — " + e.message);
+  }
+}
+
+/* ---------------- render: context usage ---------------- */
+async function measureContext() {
+  const btn = $("#context-btn");
+  const panel = $("#context-panel");
+  panel.classList.add("show");
+  clear(panel);
+  panel.appendChild(el("div", { class: "muted mono", text: "Running claude --print /context … (up to a minute)" }));
+  btn.disabled = true;
+  const prev = btn.textContent;
+  btn.textContent = "MEASURING…";
+  try {
+    const res = await api("/api/context" + scopeQuery());
+    clear(panel);
+    if (!res || res.ok === false) {
+      panel.appendChild(el("div", { class: "muted mono", text: "Could not measure: " + ((res && res.error) || "unknown") }));
+      return;
+    }
+    const cats = res.categories || [];
+    if (!cats.length) {
+      panel.appendChild(el("pre", { class: "log show", text: res.raw || "(no output)" }));
+      return;
+    }
+    panel.appendChild(el("div", { class: "ctx-total", text: "Estimated context usage by category" }));
+    cats.forEach((c) => {
+      const pctNum = parseFloat(String(c.pct).replace("%", "")) || 0;
+      const bar = el("div", { class: "ctx-bar" }, [el("span", {})]);
+      bar.firstChild.style.width = Math.min(100, pctNum) + "%";
+      panel.appendChild(el("div", { class: "ctx-row" }, [
+        el("span", { text: c.category }),
+        el("span", { text: c.tokens }),
+        el("span", { text: c.pct }),
+      ]));
+      panel.appendChild(bar);
+    });
+  } catch (e) {
+    clear(panel);
+    panel.appendChild(el("div", { class: "muted mono", text: "Backend not reachable — " + e.message }));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = prev;
+  }
 }
 
 /* ---------------- actions ---------------- */
 async function loadState() {
   try {
-    const state = await api("/api/state");
+    const state = await api("/api/state" + scopeQuery());
     if (!state || state.ok === false) throw new Error((state && state.error) || "bad state");
     hideBanner();
     renderAll(state);
@@ -877,6 +1107,8 @@ function boot() {
   initTheme();
   $("#browse-btn").addEventListener("click", browse);
   $("#install-btn").addEventListener("click", install);
+  $("#scope-browse").addEventListener("click", browseScopeDir);
+  $("#context-btn").addEventListener("click", measureContext);
   loadState();
 }
 
