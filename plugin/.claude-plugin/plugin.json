@@ -1,0 +1,49 @@
+{
+  "name": "orchestrator-budget",
+  "version": "1.0.0",
+  "description": "provider spend in context + status line, a live background refresher (no lag), and a daily task-budget soft-gate for the adaptive orchestrator. Includes route-guard, a PreToolUse hook that forces every subagent spawn onto its cheapest fitting model.",
+  "author": {
+    "name": "opus-sonnet-orchestrator"
+  },
+  "commands": [
+    "./commands/orchestrator-spending.md"
+  ],
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/alarms.js\"",
+            "timeout": 12,
+            "statusMessage": "Checking provider spend..."
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/alarms.js\"",
+            "timeout": 12
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Agent|Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/route-guard.js\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

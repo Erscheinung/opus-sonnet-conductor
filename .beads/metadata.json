@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "opus_sonnet_orchestrator",
+  "project_id": "01f8b392-44ab-49e4-8282-d3614420ac7f"
+}

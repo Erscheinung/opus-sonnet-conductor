@@ -1,0 +1,1199 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Orchestrator Installer</title>
+<style>
+  :root {
+    --red: #e1000f;
+    --ink: #0a0a0a;
+    --ink-2: #4a4a4a;
+    --ink-3: #7a7a7a;
+    --paper: #ffffff;
+    --paper-2: #f4f4f2;
+    --rule: #0a0a0a;
+    --rule-soft: #d8d8d4;
+    --m-haiku: #1baf7a;
+    --m-sonnet: #2a78d6;
+    --m-opus: #eb6834;
+    --grid: #e6e6e2;
+
+    --font-ui: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    --font-mono: "SF Mono", ui-monospace, Menlo, monospace;
+  }
+
+  html[data-theme="dark"] {
+    --red: #ff3b45;
+    --ink: #f4f4f2;
+    --ink-2: #c3c2b7;
+    --ink-3: #8a8a82;
+    --paper: #141413;
+    --paper-2: #1d1d1b;
+    --rule: #f4f4f2;
+    --rule-soft: #333330;
+    --m-haiku: #199e70;
+    --m-sonnet: #3987e5;
+    --m-opus: #d95926;
+    --grid: #2a2a27;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body { margin: 0; padding: 0; }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-ui);
+    font-size: 15px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ---- typographic primitives ---- */
+  .kicker {
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    font-weight: 800;
+    font-size: 13px;
+    color: var(--ink);
+  }
+
+  .headline {
+    font-weight: 800;
+    letter-spacing: -.03em;
+    font-size: clamp(30px, 5vw, 52px);
+    line-height: 1.02;
+    margin: 0;
+  }
+
+  .mono {
+    font-family: var(--font-mono);
+    font-size: 13px;
+  }
+
+  .lede {
+    color: var(--ink-2);
+    max-width: 62ch;
+    margin: 8px 0 0;
+  }
+
+  a { color: inherit; }
+
+  /* ---- focus ---- */
+  :focus-visible {
+    outline: 3px solid var(--m-sonnet);
+    outline-offset: 2px;
+  }
+
+  /* ---- layout ---- */
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 24px;
+    border-bottom: 2px solid var(--rule);
+    position: sticky;
+    top: 0;
+    background: var(--paper);
+    z-index: 10;
+  }
+
+  .brand {
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    font-weight: 800;
+    font-size: 14px;
+  }
+  .brand .dot { color: var(--red); }
+
+  main {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 0 24px 96px;
+  }
+
+  section {
+    padding: 40px 0;
+    border-bottom: 2px solid var(--rule);
+  }
+
+  .sec-head { margin-bottom: 24px; }
+
+  /* ---- controls ---- */
+  .btn {
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    font-weight: 800;
+    font-size: 13px;
+    background: var(--paper);
+    color: var(--ink);
+    border: 2px solid var(--rule);
+    padding: 9px 16px;
+    cursor: pointer;
+    border-radius: 0;
+    transition: none;
+  }
+  .btn:hover { background: var(--ink); color: var(--paper); }
+  .btn:disabled {
+    color: var(--ink-3);
+    border-color: var(--rule-soft);
+    cursor: not-allowed;
+    background: var(--paper);
+  }
+
+  .btn-primary {
+    border-color: var(--m-opus);
+    color: var(--m-opus);
+  }
+  .btn-primary:hover { background: var(--m-opus); color: var(--paper); }
+  .btn-primary:disabled {
+    border-color: var(--rule-soft);
+    color: var(--ink-3);
+    background: var(--paper);
+  }
+
+  .field {
+    display: flex;
+    gap: 0;
+    align-items: stretch;
+  }
+  .field input[type="text"] {
+    flex: 1;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    padding: 9px 12px;
+    border: 2px solid var(--rule);
+    border-right: 0;
+    background: var(--paper-2);
+    color: var(--ink);
+    border-radius: 0;
+    min-width: 0;
+  }
+  .field .btn { border-left: 2px solid var(--rule); }
+
+  .row-label {
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    font-size: 12px;
+    font-weight: 800;
+    color: var(--ink-2);
+    margin-bottom: 8px;
+    display: block;
+  }
+
+  .block { margin-top: 28px; }
+
+  /* ---- component / toggle rows ---- */
+  .list { border: 2px solid var(--rule); }
+  .item {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 14px;
+    border-bottom: 2px solid var(--rule-soft);
+  }
+  .item:last-child { border-bottom: 0; }
+  .item .grow { flex: 1; min-width: 0; }
+  .item .name {
+    font-weight: 700;
+    font-size: 14px;
+  }
+  .item .path {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--ink-3);
+    word-break: break-all;
+  }
+  .item .note {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--ink-3);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+  }
+
+  input[type="checkbox"], input[type="radio"] {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--m-opus);
+    flex: 0 0 auto;
+    cursor: pointer;
+  }
+
+  /* ---- pills ---- */
+  .pill {
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    font-size: 11px;
+    font-weight: 800;
+    border: 2px solid currentColor;
+    padding: 3px 8px;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .pill.found { color: var(--m-haiku); }
+  .pill.missing { color: var(--ink-3); }
+  .pill.enabled { color: var(--ink); }
+  .pill.disabled { color: var(--ink-3); }
+  .pill .glyph { font-weight: 800; }
+
+  /* ---- radio chips ---- */
+  .chips { display: flex; gap: 12px; flex-wrap: wrap; }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    border: 2px solid var(--rule);
+    padding: 8px 14px;
+    cursor: pointer;
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    font-size: 12px;
+    font-weight: 800;
+    user-select: none;
+  }
+  .chip.checked { background: var(--ink); color: var(--paper); }
+  .chip.disabled {
+    color: var(--ink-3);
+    border-color: var(--rule-soft);
+    cursor: not-allowed;
+  }
+  .chip .chip-note {
+    text-transform: none;
+    letter-spacing: 0;
+    font-weight: 400;
+    color: var(--ink-3);
+  }
+
+  /* ---- toggle switch (mcp/plugin) ---- */
+  .toggle {
+    position: relative;
+    width: 46px;
+    height: 24px;
+    border: 2px solid var(--rule);
+    background: var(--paper-2);
+    cursor: pointer;
+    flex: 0 0 auto;
+    padding: 0;
+    border-radius: 0;
+  }
+  .toggle .knob {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    background: var(--ink-3);
+    transition: none;
+  }
+  .toggle[aria-pressed="true"] { background: var(--ink); }
+  .toggle[aria-pressed="true"] .knob {
+    left: auto;
+    right: 2px;
+    background: var(--paper);
+  }
+
+  /* ---- two column ---- */
+  .cols {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 28px;
+  }
+  @media (max-width: 760px) {
+    .cols { grid-template-columns: 1fr; }
+  }
+  .col-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+  .col-head .count {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--ink-3);
+  }
+
+  /* ---- banners / callouts ---- */
+  .banner {
+    border: 2px solid var(--red);
+    color: var(--red);
+    padding: 12px 14px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    margin-bottom: 20px;
+    display: none;
+  }
+  .banner.show { display: block; }
+
+  .callout-danger {
+    border: 2px solid var(--red);
+    color: var(--red);
+    padding: 12px 14px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    margin-top: 20px;
+  }
+
+  /* ---- scope bar + sub-heads ---- */
+  .scope-bar {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    border: 2px solid var(--rule);
+    padding: 12px 14px;
+    margin-bottom: 20px;
+  }
+  .mono-note {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--ink-3);
+    word-break: break-all;
+  }
+  .sub-head {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-top: 28px;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--rule);
+  }
+  .context-panel {
+    margin-top: 14px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    display: none;
+  }
+  .context-panel.show { display: block; }
+  .ctx-total {
+    font-size: 13px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    margin-bottom: 12px;
+  }
+  .ctx-row {
+    display: grid;
+    grid-template-columns: 1fr auto 56px;
+    gap: 12px;
+    align-items: center;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--rule-soft);
+  }
+  .ctx-bar {
+    grid-column: 1 / -1;
+    height: 6px;
+    background: var(--paper-2);
+    border: 1px solid var(--rule-soft);
+  }
+  .ctx-bar > span {
+    display: block;
+    height: 100%;
+    background: var(--m-sonnet);
+  }
+
+  .result-ok {
+    border: 2px solid var(--m-haiku);
+    color: var(--m-haiku);
+    padding: 10px 14px;
+    font-family: var(--font-mono);
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    font-size: 13px;
+    margin-top: 16px;
+    display: none;
+  }
+  .result-ok.show { display: block; }
+
+  .result-err {
+    border: 2px solid var(--red);
+    color: var(--red);
+    padding: 10px 14px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    margin-top: 16px;
+    display: none;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .result-err.show { display: block; }
+
+  /* ---- log panel ---- */
+  .log {
+    margin-top: 16px;
+    border: 2px solid var(--rule);
+    background: var(--paper-2);
+    color: var(--ink);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.45;
+    padding: 12px 14px;
+    max-height: 320px;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    display: none;
+  }
+  .log.show { display: block; }
+
+  /* ---- footer ---- */
+  .footer-line {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--ink-2);
+    line-height: 1.7;
+    word-break: break-all;
+  }
+  .footer-line .sep { color: var(--ink-3); padding: 0 8px; }
+  .footer-line .ok { color: var(--m-haiku); }
+  .footer-line .no { color: var(--red); }
+
+  .muted { color: var(--ink-3); }
+  .hint { font-size: 12px; color: var(--ink-3); margin-top: 6px; font-family: var(--font-mono); }
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand">ORCHESTRATOR <span class="dot">&middot;</span> INSTALLER</div>
+    <button id="theme-toggle" class="btn" type="button" aria-label="Toggle color theme">THEME: LIGHT</button>
+  </div>
+
+  <main>
+    <div id="banner" class="banner" role="alert"></div>
+
+    <!-- SECTION 1 : INSTALL -->
+    <section id="sec-install">
+      <div class="sec-head">
+        <div class="kicker">01 / INSTALL</div>
+        <h1 class="headline">Set up the orchestrator</h1>
+      </div>
+
+      <div class="block">
+        <label class="row-label" for="target-input">Target install directory</label>
+        <div class="field">
+          <input id="target-input" type="text" readonly placeholder="(loading&hellip;)" aria-label="Install target path">
+          <button id="browse-btn" class="btn" type="button">BROWSE</button>
+        </div>
+      </div>
+
+      <div class="block">
+        <span class="row-label">Components</span>
+        <div id="components" class="list" aria-live="polite"></div>
+      </div>
+
+      <div class="block">
+        <span class="row-label">Checkpoints</span>
+        <div id="checkpoints" class="chips" role="radiogroup" aria-label="Checkpoint backend"></div>
+      </div>
+
+      <div class="block">
+        <span class="row-label">Cost hook / spend display</span>
+        <div id="costhook" class="list"></div>
+      </div>
+
+      <div class="block">
+        <div class="list">
+          <div class="item">
+            <input id="global-check" type="checkbox">
+            <div class="grow">
+              <label class="name" for="global-check">Also install globally to ~/.claude</label>
+              <div class="hint">Makes components available in every project, not just the target.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="block">
+        <button id="install-btn" class="btn btn-primary" type="button">INSTALL</button>
+      </div>
+
+      <div id="install-ok" class="result-ok" role="status">&#10003; DONE</div>
+      <div id="install-err" class="result-err" role="alert"></div>
+      <pre id="install-log" class="log" aria-live="polite"></pre>
+    </section>
+
+    <!-- SECTION 2 : MCP + PLUGIN EXPLORER -->
+    <section id="sec-explorer">
+      <div class="sec-head">
+        <div class="kicker">02 / CONTEXT DIET &nbsp;&middot;&nbsp; DISABLE NEATLY</div>
+        <p class="lede">Each loaded MCP server and plugin costs context every message. Toggle off what this machine does not need. Changes write Claude Code config directly; nothing is deleted.</p>
+      </div>
+
+      <div class="scope-bar">
+        <span class="row-label" style="margin:0">Scope</span>
+        <div id="scope-chips" class="chips" role="radiogroup" aria-label="Config scope"></div>
+        <button id="scope-browse" class="btn" type="button">BROWSE DIR&hellip;</button>
+        <span id="scope-path" class="mono-note"></span>
+      </div>
+
+      <div class="cols">
+        <div>
+          <div class="col-head">
+            <span class="row-label" style="margin:0">MCP Servers</span>
+            <span id="mcp-count" class="count"></span>
+          </div>
+          <div id="mcp-list" class="list"></div>
+        </div>
+        <div>
+          <div class="col-head">
+            <span class="row-label" style="margin:0">Plugins</span>
+            <span id="plugin-count" class="count"></span>
+          </div>
+          <div id="plugin-list" class="list"></div>
+        </div>
+      </div>
+
+      <div class="callout-danger">
+        &#9888; Disabling an MCP mid-session needs a Claude Code restart to take effect.
+      </div>
+
+      <div class="sub-head">
+        <span class="row-label" style="margin:0">CLAUDE.md &amp; settings at this scope</span>
+      </div>
+      <div id="claudemd-list" class="list"></div>
+
+      <div class="sub-head">
+        <span class="row-label" style="margin:0">Context usage</span>
+        <button id="context-btn" class="btn" type="button">MEASURE CONTEXT</button>
+      </div>
+      <p class="lede" style="margin:8px 0 0">Runs <code>claude --print /context</code> for the selected scope and shows the token breakdown. May take up to a minute.</p>
+      <div id="context-panel" class="context-panel" aria-live="polite"></div>
+    </section>
+
+    <!-- SECTION 3 : STATUS / FOOTER -->
+    <section id="sec-footer" style="border-bottom:0">
+      <div class="kicker" style="margin-bottom:12px">03 / RUNTIME</div>
+      <div id="footer-line" class="footer-line">Detecting runtime&hellip;</div>
+    </section>
+  </main>
+
+<script>
+"use strict";
+/* ============================================================
+   Opus/Sonnet orchestrator installer GUI.
+   Single file. Talks to the local Python backend via fetch.
+   Sections mirror the DOM: theme, api, render(install/explorer/
+   footer), actions, boot.
+   ============================================================ */
+
+/* ---------------- state ---------------- */
+let STATE = null;
+let SCOPE = "global";      // "global" | "dir"
+let SCOPE_DIR = null;      // absolute path when SCOPE === "dir"
+
+function scopeQuery() {
+  if (SCOPE === "dir" && SCOPE_DIR) {
+    return "?scope=dir&dir=" + encodeURIComponent(SCOPE_DIR);
+  }
+  return "?scope=global";
+}
+function scopeBody() {
+  return SCOPE === "dir" && SCOPE_DIR ? { scope: "dir", directory: SCOPE_DIR } : { scope: "global" };
+}
+
+/* ---------------- helpers ---------------- */
+const $ = (sel) => document.querySelector(sel);
+
+function el(tag, props, children) {
+  const node = document.createElement(tag);
+  if (props) {
+    for (const [k, v] of Object.entries(props)) {
+      if (k === "class") node.className = v;
+      else if (k === "text") node.textContent = v;      // safe text insert
+      else if (k === "html") node.innerHTML = v;         // only for static literals
+      else if (k in node) node[k] = v;
+      else node.setAttribute(k, v);
+    }
+  }
+  if (children) for (const c of children) if (c) node.appendChild(c);
+  return node;
+}
+
+function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
+
+/* ---------------- mock backend (GitHub Pages / ?mock) ----------------
+   The real installer talks to installer/server.py. On a static host there is
+   no backend, so every /api call is answered here from in-memory state and
+   nothing is ever written. */
+const MOCK = /\.github\.io$/.test(location.hostname) || location.protocol === "file:" || /[?&]mock\b/.test(location.search);
+const mockDb = {
+  scopes: ["/Users/you/Code/web-app", "/Users/you/Code/api-service", "/Users/you/Code/opus-sonnet-conductor"],
+  found: { "adaptive-orchestrator": true, "no-subagents": false, "haiku-reader": true, "sonnet-worker": false, "sonnet-worker-lite": false, "route-guard": false },
+  mcp: { global: { github: false, linear: true, "claude-in-chrome": false }, dir: { postgres: false, sentry: true } },
+  plugins: { global: { "orchestrator-budget@local": true, "caveman@caveman": true, "figma@claude-plugins": false }, dir: { "orchestrator-budget@local": false } },
+};
+const COMPONENT_PATHS = {
+  "adaptive-orchestrator": ".claude/skills/adaptive-orchestrator/SKILL.md",
+  "no-subagents": ".claude/skills/no-subagents/SKILL.md",
+  "haiku-reader": ".claude/agents/haiku-reader.md",
+  "sonnet-worker": ".claude/agents/sonnet-worker.md",
+  "sonnet-worker-lite": ".claude/agents/sonnet-worker-lite.md",
+  "route-guard": ".claude/hooks/route-guard.js",
+};
+function mockQs(path) {
+  const q = new URLSearchParams(path.split("?")[1] || "");
+  return { scope: q.get("scope") || "global", dir: q.get("dir") };
+}
+function mockApi(path, body) {
+  const route = path.split("?")[0];
+  const { scope, dir } = mockQs(path);
+  const b = body || {};
+  const bucket = (scope === "dir" && dir) ? "dir" : "global";
+  const delay = (v, ms) => new Promise((r) => setTimeout(() => r(v), ms || 120));
+  if (route === "/api/state") {
+    const comps = Object.keys(COMPONENT_PATHS).map((n) => ({ name: n, path: "~/" + COMPONENT_PATHS[n], found: !!mockDb.found[n] }));
+    return delay({
+      scope, directory: dir, scopes: mockDb.scopes, components: comps,
+      costHook: { found: !!mockDb.plugins.global["orchestrator-budget@local"] },
+      bd: true, node: { found: true, version: "v22.4.0" },
+      mcpServers: Object.keys(mockDb.mcp[bucket]).map((n) => ({ name: n, disabled: mockDb.mcp[bucket][n] })),
+      plugins: Object.keys(mockDb.plugins[bucket]).map((id) => ({ id, enabled: mockDb.plugins[bucket][id] })),
+      defaultTarget: "/Users/you/Code/my-project",
+    });
+  }
+  if (route === "/api/toggle-mcp") { mockDb.mcp[bucket][b.name] = !!b.disabled; return delay({ ok: true }); }
+  if (route === "/api/toggle-plugin") { mockDb.plugins[bucket][b.id] = !!b.enabled; return delay({ ok: true }); }
+  if (route === "/api/pick-folder") return delay({ ok: true, path: "/Users/you/Code/picked-folder" });
+  if (route === "/api/open") return delay({ ok: false, error: "mock mode — no files on disk" });
+  if (route === "/api/claude-md") {
+    const base = bucket === "dir" ? dir : "~/.claude";
+    return delay({ ok: true, files: [
+      { label: bucket === "dir" ? "project CLAUDE.md" : "global CLAUDE.md", path: base + "/CLAUDE.md", exists: true, lines: 42 },
+      { label: bucket === "dir" ? "project AGENTS.md" : "global settings", path: base + (bucket === "dir" ? "/AGENTS.md" : "/settings.json"), exists: bucket === "dir" ? false : true, lines: 18 },
+    ] });
+  }
+  if (route === "/api/context") {
+    return delay({ ok: true, raw: "", categories: [
+      { category: "System prompt", tokens: "6.1k", pct: "3.0%" }, { category: "System tools", tokens: "14.8k", pct: "7.4%" },
+      { category: "Custom agents", tokens: "0.9k", pct: "0.5%" }, { category: "Skills", tokens: "2.3k", pct: "1.2%" },
+      { category: "Messages", tokens: "38.0k", pct: "19.0%" }, { category: "Free space", tokens: "137.9k", pct: "69.0%" },
+    ] }, 900);
+  }
+  if (route === "/api/install") {
+    (b.components || []).forEach((c) => { mockDb.found[c] = true; });
+    const lines = ["Installing adaptive orchestrator into: " + b.target + "  (MOCK — nothing written)", ""]
+      .concat((b.components || []).map((c) => "  Installed: " + (COMPONENT_PATHS[c] || c)))
+      .concat(["  Checkpoint store set to: " + b.checkpoints, b.costHook ? "  Installed plugin: orchestrator-budget" : "", "", "Done."]);
+    return delay({ ok: true, code: 0, log: lines.join("\n") + "\n" }, 700);
+  }
+  return delay({ ok: false, error: "not found" });
+}
+if (MOCK) {
+  document.addEventListener("DOMContentLoaded", () => {
+    const r = document.createElement("div");
+    r.textContent = "MOCK PLAY — simulated backend. Nothing is read or written. Clone the repo and run launch-installer.command for the real installer.";
+    r.style.cssText = "position:sticky;top:0;z-index:50;padding:8px 14px;background:#e30613;color:#fff;font:600 12px/1.4 ui-monospace,Menlo,monospace;letter-spacing:.04em";
+    document.body.insertBefore(r, document.body.firstChild);
+  });
+}
+
+/* ---------------- api ---------------- */
+async function api(path, body) {
+  if (MOCK) return mockApi(path, body);
+  const opts = body === undefined
+    ? { method: "GET" }
+    : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
+  const res = await fetch(path, opts);
+  if (!res.ok && res.status >= 500) throw new Error("HTTP " + res.status);
+  return res.json();
+}
+
+function showBanner(msg) {
+  const b = $("#banner");
+  b.textContent = msg;
+  b.classList.add("show");
+}
+function hideBanner() { $("#banner").classList.remove("show"); }
+
+/* ---------------- theme ---------------- */
+function initTheme() {
+  const btn = $("#theme-toggle");
+  const apply = (mode) => {
+    document.documentElement.setAttribute("data-theme", mode);
+    btn.textContent = "THEME: " + mode.toUpperCase();
+  };
+  btn.addEventListener("click", () => {
+    const next = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
+    apply(next);
+  });
+  apply(document.documentElement.getAttribute("data-theme") || "light");
+}
+
+/* ---------------- pill factory ---------------- */
+function pill(kind, glyph, label) {
+  return el("span", { class: "pill " + kind }, [
+    el("span", { class: "glyph", text: glyph }),
+    el("span", { text: label }),
+  ]);
+}
+
+/* ---------------- render: components ---------------- */
+function renderComponents(components) {
+  const box = $("#components");
+  clear(box);
+  (components || []).forEach((c, i) => {
+    const cb = el("input", { type: "checkbox" });
+    cb.id = "cmp-" + i;
+    cb.checked = !c.found;                 // smart default: only tick missing
+    cb.dataset.name = c.name;
+    cb.dataset.role = "component";
+
+    const statusPill = c.found
+      ? pill("found", "●", "FOUND")
+      : pill("missing", "○", "NOT INSTALLED");
+
+    const meta = el("div", { class: "grow" }, [
+      el("label", { class: "name", for: cb.id, text: c.name }),
+      el("div", { class: "path", text: c.path || "" }),
+      c.found ? el("div", { class: "note", text: "already present" }) : null,
+    ]);
+
+    box.appendChild(el("div", { class: "item" }, [cb, meta, statusPill]));
+  });
+}
+
+/* ---------------- render: checkpoints ---------------- */
+function renderCheckpoints(bd) {
+  const box = $("#checkpoints");
+  clear(box);
+  const options = [
+    { value: "beads", label: "BEADS", requiresBd: true },
+    { value: "markdown", label: "MARKDOWN", requiresBd: false },
+  ];
+  const defaultVal = bd ? "beads" : "markdown";
+
+  options.forEach((opt) => {
+    const disabled = opt.requiresBd && !bd;
+    const input = el("input", {
+      type: "radio",
+      name: "checkpoints",
+      value: opt.value,
+    });
+    input.checked = opt.value === defaultVal;
+    input.disabled = disabled;
+    input.dataset.role = "checkpoint";
+
+    const chip = el("label", { class: "chip" + (input.checked ? " checked" : "") + (disabled ? " disabled" : "") }, [
+      input,
+      el("span", { text: opt.label }),
+      disabled ? el("span", { class: "chip-note", text: "bd not on PATH" }) : null,
+    ]);
+
+    input.addEventListener("change", () => {
+      box.querySelectorAll(".chip").forEach((c) => c.classList.remove("checked"));
+      if (input.checked) chip.classList.add("checked");
+    });
+
+    box.appendChild(chip);
+  });
+}
+
+/* ---------------- render: cost hook ---------------- */
+function renderCostHook(costHook) {
+  const box = $("#costhook");
+  clear(box);
+  const found = !!(costHook && costHook.found);
+
+  if (found) {
+    const meta = el("div", { class: "grow" }, [
+      el("div", { class: "name", text: "Cost hook" }),
+      el("div", { class: "hint", text: "Live spend display + daily task cap already wired." }),
+    ]);
+    box.appendChild(el("div", { class: "item" }, [
+      meta,
+      pill("found", "●", "FOUND — spending plugin active"),
+    ]));
+  } else {
+    const cb = el("input", { type: "checkbox", id: "costhook-check" });
+    cb.dataset.role = "costhook";
+    const meta = el("div", { class: "grow" }, [
+      el("label", { class: "name", for: "costhook-check", text: "Install cost hook / spend display" }),
+      el("div", { class: "hint", text: "Injects live spend into the status line and enforces a daily task cap." }),
+    ]);
+    box.appendChild(el("div", { class: "item" }, [cb, meta]));
+  }
+}
+
+/* ---------------- render: mcp servers ---------------- */
+function renderMcp(servers) {
+  const box = $("#mcp-list");
+  clear(box);
+  $("#mcp-count").textContent = (servers || []).length + " DETECTED";
+
+  if (!servers || servers.length === 0) {
+    box.appendChild(el("div", { class: "item" }, [el("span", { class: "muted mono", text: "none configured" })]));
+    return;
+  }
+
+  servers.forEach((s) => {
+    const enabled = !s.disabled;
+    const status = enabled ? pill("enabled", "●", "ENABLED") : pill("disabled", "○", "DISABLED");
+    const toggle = el("button", {
+      type: "button",
+      class: "toggle",
+      "aria-pressed": String(enabled),
+      "aria-label": "Toggle MCP server " + s.name,
+    }, [el("span", { class: "knob" })]);
+
+    toggle.addEventListener("click", () => toggleMcp(s, toggle, status));
+
+    const meta = el("div", { class: "grow" }, [el("span", { class: "path", text: s.name })]);
+    box.appendChild(el("div", { class: "item" }, [meta, status, toggle]));
+  });
+}
+
+async function toggleMcp(server, toggle, statusEl) {
+  const wasEnabled = !server.disabled;
+  const nextDisabled = wasEnabled;        // enabled -> disable, disabled -> enable
+  // optimistic
+  setMcpVisual(toggle, statusEl, !nextDisabled);
+  try {
+    const res = await api("/api/toggle-mcp", Object.assign({ name: server.name, disabled: nextDisabled }, scopeBody()));
+    if (!res || res.ok === false) throw new Error(res && res.error ? res.error : "toggle failed");
+    server.disabled = nextDisabled;
+    hideBanner();
+  } catch (e) {
+    setMcpVisual(toggle, statusEl, wasEnabled);   // revert
+    showBanner("Could not toggle MCP \"" + server.name + "\": " + e.message);
+  }
+}
+
+function setMcpVisual(toggle, statusEl, enabled) {
+  toggle.setAttribute("aria-pressed", String(enabled));
+  clear(statusEl);
+  const src = enabled ? pill("enabled", "●", "ENABLED") : pill("disabled", "○", "DISABLED");
+  statusEl.className = src.className;
+  while (src.firstChild) statusEl.appendChild(src.firstChild);
+}
+
+/* ---------------- render: plugins ---------------- */
+function renderPlugins(plugins) {
+  const box = $("#plugin-list");
+  clear(box);
+  $("#plugin-count").textContent = (plugins || []).length + " DETECTED";
+
+  if (!plugins || plugins.length === 0) {
+    box.appendChild(el("div", { class: "item" }, [el("span", { class: "muted mono", text: "none configured" })]));
+    return;
+  }
+
+  plugins.forEach((p) => {
+    const enabled = !!p.enabled;
+    const status = enabled ? pill("enabled", "●", "ENABLED") : pill("disabled", "○", "DISABLED");
+    const toggle = el("button", {
+      type: "button",
+      class: "toggle",
+      "aria-pressed": String(enabled),
+      "aria-label": "Toggle plugin " + p.id,
+    }, [el("span", { class: "knob" })]);
+
+    toggle.addEventListener("click", () => togglePlugin(p, toggle, status));
+
+    const meta = el("div", { class: "grow" }, [el("span", { class: "path", text: p.id })]);
+    box.appendChild(el("div", { class: "item" }, [meta, status, toggle]));
+  });
+}
+
+async function togglePlugin(plugin, toggle, statusEl) {
+  const wasEnabled = !!plugin.enabled;
+  const nextEnabled = !wasEnabled;
+  setMcpVisual(toggle, statusEl, nextEnabled);    // same visual helper
+  try {
+    const res = await api("/api/toggle-plugin", Object.assign({ id: plugin.id, enabled: nextEnabled }, scopeBody()));
+    if (!res || res.ok === false) throw new Error(res && res.error ? res.error : "toggle failed");
+    plugin.enabled = nextEnabled;
+    hideBanner();
+  } catch (e) {
+    setMcpVisual(toggle, statusEl, wasEnabled);
+    showBanner("Could not toggle plugin \"" + plugin.id + "\": " + e.message);
+  }
+}
+
+/* ---------------- render: footer ---------------- */
+function renderFooter(state) {
+  const line = $("#footer-line");
+  clear(line);
+  const node = state.node || {};
+  const nodeTxt = node.found ? (node.version || "present") : "absent";
+
+  const parts = [
+    el("span", {}, [el("span", { text: "node " }), el("span", { class: node.found ? "ok" : "no", text: nodeTxt })]),
+    el("span", { class: "sep", text: "│" }),
+    el("span", {}, [el("span", { text: "bd " }), el("span", { class: state.bd ? "ok" : "no", text: state.bd ? "present" : "absent" })]),
+    el("span", { class: "sep", text: "│" }),
+    el("span", { text: "target " + (state.defaultTarget || "?") }),
+  ];
+  parts.forEach((p) => line.appendChild(p));
+}
+
+/* ---------------- render all ---------------- */
+function renderAll(state) {
+  STATE = state;
+  $("#target-input").value = state.defaultTarget || "";
+  renderComponents(state.components);
+  renderCheckpoints(!!state.bd);
+  renderCostHook(state.costHook);
+  renderScopeBar(state);
+  renderMcp(state.mcpServers);
+  renderPlugins(state.plugins);
+  renderFooter(state);
+  loadClaudeMd();
+}
+
+/* ---------------- render: scope bar ---------------- */
+function renderScopeBar(state) {
+  const box = $("#scope-chips");
+  if (!box) return;
+  clear(box);
+
+  const mk = (label, active, on) => {
+    const chip = el("button", {
+      type: "button",
+      class: "chip" + (active ? " active" : ""),
+      role: "radio",
+      "aria-checked": String(active),
+      text: label,
+    });
+    chip.addEventListener("click", on);
+    return chip;
+  };
+
+  box.appendChild(mk("GLOBAL", SCOPE === "global", () => {
+    SCOPE = "global"; SCOPE_DIR = null; loadState();
+  }));
+  if (SCOPE === "dir" && SCOPE_DIR) {
+    const short = SCOPE_DIR.replace(/^.*\//, "") || SCOPE_DIR;
+    box.appendChild(mk("DIR: " + short, true, () => {}));
+  }
+  const pathEl = $("#scope-path");
+  if (pathEl) pathEl.textContent = SCOPE === "dir" && SCOPE_DIR ? SCOPE_DIR : "~/.claude.json · ~/.claude/settings.json";
+}
+
+async function browseScopeDir() {
+  try {
+    const res = await api("/api/pick-folder", {});
+    if (res && res.ok && res.path) {
+      SCOPE = "dir";
+      SCOPE_DIR = res.path.replace(/\/$/, "");
+      hideBanner();
+      loadState();
+    } else if (res && res.canceled) {
+      // no-op
+    } else {
+      showBanner("Folder picker failed" + (res && res.error ? ": " + res.error : ""));
+    }
+  } catch (e) {
+    showBanner("Backend not reachable — " + e.message);
+  }
+}
+
+/* ---------------- render: CLAUDE.md ---------------- */
+async function loadClaudeMd() {
+  const box = $("#claudemd-list");
+  if (!box) return;
+  clear(box);
+  box.appendChild(el("div", { class: "item" }, [el("span", { class: "muted mono", text: "loading…" })]));
+  try {
+    const res = await api("/api/claude-md" + scopeQuery());
+    clear(box);
+    const files = (res && res.files) || [];
+    if (!files.length) {
+      box.appendChild(el("div", { class: "item" }, [el("span", { class: "muted mono", text: "none at this scope" })]));
+      return;
+    }
+    files.forEach((f) => {
+      const meta = el("div", { class: "grow" }, [
+        el("span", { class: "path", text: f.label + " · " + f.path }),
+      ]);
+      let status;
+      if (f.exists) {
+        status = pill("enabled", "●", (f.lines || 0) + " LINES");
+      } else {
+        status = pill("disabled", "○", "ABSENT");
+      }
+      const kids = [meta, status];
+      if (f.exists) {
+        const openBtn = el("button", { type: "button", class: "btn", text: "OPEN" });
+        openBtn.addEventListener("click", () => openFile(f.path));
+        kids.push(openBtn);
+      }
+      box.appendChild(el("div", { class: "item" }, kids));
+    });
+  } catch (e) {
+    clear(box);
+    box.appendChild(el("div", { class: "item" }, [el("span", { class: "muted mono", text: "error: " + e.message })]));
+  }
+}
+
+async function openFile(path) {
+  try {
+    const res = await api("/api/open", { path });
+    if (!res || res.ok === false) showBanner("Could not open " + path + (res && res.error ? ": " + res.error : ""));
+    else hideBanner();
+  } catch (e) {
+    showBanner("Backend not reachable — " + e.message);
+  }
+}
+
+/* ---------------- render: context usage ---------------- */
+async function measureContext() {
+  const btn = $("#context-btn");
+  const panel = $("#context-panel");
+  panel.classList.add("show");
+  clear(panel);
+  panel.appendChild(el("div", { class: "muted mono", text: "Running claude --print /context … (up to a minute)" }));
+  btn.disabled = true;
+  const prev = btn.textContent;
+  btn.textContent = "MEASURING…";
+  try {
+    const res = await api("/api/context" + scopeQuery());
+    clear(panel);
+    if (!res || res.ok === false) {
+      panel.appendChild(el("div", { class: "muted mono", text: "Could not measure: " + ((res && res.error) || "unknown") }));
+      return;
+    }
+    const cats = res.categories || [];
+    if (!cats.length) {
+      panel.appendChild(el("pre", { class: "log show", text: res.raw || "(no output)" }));
+      return;
+    }
+    panel.appendChild(el("div", { class: "ctx-total", text: "Estimated context usage by category" }));
+    cats.forEach((c) => {
+      const pctNum = parseFloat(String(c.pct).replace("%", "")) || 0;
+      const bar = el("div", { class: "ctx-bar" }, [el("span", {})]);
+      bar.firstChild.style.width = Math.min(100, pctNum) + "%";
+      panel.appendChild(el("div", { class: "ctx-row" }, [
+        el("span", { text: c.category }),
+        el("span", { text: c.tokens }),
+        el("span", { text: c.pct }),
+      ]));
+      panel.appendChild(bar);
+    });
+  } catch (e) {
+    clear(panel);
+    panel.appendChild(el("div", { class: "muted mono", text: "Backend not reachable — " + e.message }));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = prev;
+  }
+}
+
+/* ---------------- actions ---------------- */
+async function loadState() {
+  try {
+    const state = await api("/api/state" + scopeQuery());
+    if (!state || state.ok === false) throw new Error((state && state.error) || "bad state");
+    hideBanner();
+    renderAll(state);
+  } catch (e) {
+    showBanner("Backend not reachable — " + e.message);
+  }
+}
+
+async function browse() {
+  try {
+    const res = await api("/api/pick-folder", {});
+    if (res && res.ok && res.path) {
+      $("#target-input").value = res.path;
+      hideBanner();
+    } else if (res && res.canceled) {
+      // user canceled: no-op
+    } else {
+      showBanner("Folder picker failed" + (res && res.error ? ": " + res.error : ""));
+    }
+  } catch (e) {
+    showBanner("Backend not reachable — " + e.message);
+  }
+}
+
+function collectInstallPayload() {
+  const target = $("#target-input").value.trim();
+  const components = Array.from(document.querySelectorAll('input[data-role="component"]:checked'))
+    .map((cb) => cb.dataset.name);
+  const cpEl = document.querySelector('input[data-role="checkpoint"]:checked');
+  const checkpoints = cpEl ? cpEl.value : "markdown";
+  const costHookEl = document.querySelector('input[data-role="costhook"]');
+  // if the cost hook is already found, backend needs no reinstall -> false
+  const costHook = costHookEl ? costHookEl.checked : false;
+  const global = $("#global-check").checked;
+  return { target, components, checkpoints, costHook, global };
+}
+
+async function install() {
+  const btn = $("#install-btn");
+  const okEl = $("#install-ok");
+  const errEl = $("#install-err");
+  const logEl = $("#install-log");
+  const payload = collectInstallPayload();
+
+  okEl.classList.remove("show");
+  errEl.classList.remove("show");
+  errEl.textContent = "";
+
+  if (!payload.target) {
+    errEl.textContent = "No target directory selected.";
+    errEl.classList.add("show");
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = "INSTALLING…";
+  logEl.classList.add("show");
+  logEl.textContent = "$ install " + payload.components.join(" ") + "\n";
+
+  try {
+    const res = await api("/api/install", payload);
+    const log = (res && res.log) || "";
+    logEl.textContent += log;
+    logEl.scrollTop = logEl.scrollHeight;
+
+    if (res && res.ok) {
+      okEl.classList.add("show");
+    } else {
+      const code = res && (res.code !== undefined && res.code !== null) ? res.code : "?";
+      const tail = log.split("\n").filter(Boolean).slice(-6).join("\n");
+      errEl.textContent = "FAILED (code " + code + ")\n" + tail;
+      errEl.classList.add("show");
+    }
+  } catch (e) {
+    errEl.textContent = "Backend not reachable — " + e.message;
+    errEl.classList.add("show");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "INSTALL";
+    // refresh pills regardless of outcome
+    loadState();
+  }
+}
+
+/* ---------------- boot ---------------- */
+function boot() {
+  initTheme();
+  $("#browse-btn").addEventListener("click", browse);
+  $("#install-btn").addEventListener("click", install);
+  $("#scope-browse").addEventListener("click", browseScopeDir);
+  $("#context-btn").addEventListener("click", measureContext);
+  loadState();
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", boot);
+} else {
+  boot();
+}
+</script>
+</body>
+</html>
