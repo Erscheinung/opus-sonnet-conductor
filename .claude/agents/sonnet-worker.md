@@ -6,7 +6,7 @@ description: >
   a feature within named files, refactoring within a stated boundary. Runs on
   Sonnet at high effort in an isolated fresh context. Not for open-ended
   architecture, ambiguous diagnosis, or reading-only tasks.
-model: claude-sonnet-4-6
+model: sonnet
 effort: high
 tools: Read, Edit, Write, Grep, Glob, Bash
 ---

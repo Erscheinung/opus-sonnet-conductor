@@ -22,7 +22,7 @@ Without guidance, a Claude Code session runs everything on whatever model is con
 | Real bounded implementation | `sonnet-worker` | Sonnet / high |
 | Plan, diagnose, architect, synthesize | primary session | Opus |
 
-Model and effort are pinned in each subagent's `.claude/agents/*.md` frontmatter (`model:`, `effort:`, `tools:`). Claude Code **does** support per-subagent model selection this way — it is set in the agent definition, not per Agent-tool call (there is no per-call override). Because effort is fixed per definition, the **worker variant is the effort lever**, and the fine control is the delegation brief.
+Model and effort are pinned in each subagent's `.claude/agents/*.md` frontmatter (`model:`, `effort:`, `tools:`). Resolution order is `CLAUDE_CODE_SUBAGENT_MODEL` env > Agent-call `model` > agent frontmatter > parent model. A spawn that names no tier (general-purpose, fork) inherits the parent, which is how Opus sessions end up with all-Opus subagents. Because effort is fixed per definition, the **worker variant is the effort lever**, and the fine control is the delegation brief.
 
 ## The information diet (why it stays cheap)
 
@@ -35,6 +35,13 @@ Every delegation is written as a brief to a capable teammate who cannot see the 
 ## Checkpoints
 
 Choose at setup: **beads** (`bd`, a lightweight dependency-aware issue tracker — structured, git-friendly, resumable) or a **markdown** `CHECKPOINT.md` ledger (zero dependency). The choice is written to `.claude/orchestrator-checkpoints`; the orchestrator sticks to it. One checkpoint per delegated task means you can stop whenever the budget runs out and resume without re-reading anything.
+
+## Why subagents were all Opus, and the fix
+
+1. **Generic spawns inherit the parent.** With no `subagent_type`/`model` on the call, the subagent has no frontmatter and runs on Opus. The skill now requires both fields on every spawn.
+2. **`route-guard` hook** (`plugin/hooks/route-guard.js`, PreToolUse on Agent/Task) rewrites any spawn to the cheapest fitting tier, blocks `opus`/`inherit` on our workers, honours `/no-subagents`, warns on `CLAUDE_CODE_SUBAGENT_MODEL` and on >8 spawns per session, and logs every decision.
+3. **Pins match your gateway.** `setup.sh` now pins the newest `sonnet`/`haiku` key in `modelOverrides` (previously only `claude-sonnet-4-6`/`claude-haiku-4-5`, which never matched 5.x gateways). Without a gateway, plain `sonnet`/`haiku` aliases are used.
+4. **Cost-aware delegation rules** (see the skill): skip delegation for tiny jobs, batch briefs, cap fan-out, cheapest-tier-first, short reports, keep the Opus context from growing.
 
 ## Cost awareness
 
@@ -58,13 +65,14 @@ Run this plugin **or** the standalone `spending plugin` plugin, not both (they s
 │   ├── adaptive-orchestrator/   # routing, delegation, checkpoint, budget rules
 │   └── no-subagents/            # /no-subagents toggle
 ├── plugin/                      # vendored cost hook + lag fix + task budget
-│   ├── hooks/                   # spending-core, alarms, refresher, task-budget, statusline, full-display
+│   ├── hooks/                   # route-guard, spending-core, alarms, refresher, task-budget, statusline, full-display
 │   ├── commands/orchestrator-spending.md
 │   └── .claude-plugin/          # plugin.json, marketplace.json
 ├── AGENTS.md                    # concise repo-level routing rules
 ├── setup.sh                     # installer
 ├── tests/
 │   ├── routing_decisions.md     # routing scenario table
+│   ├── test_route_guard.js      # tier-enforcement unit test
 │   └── test_task_budget.js      # budget soft-gate unit test
 └── README.md
 ```
@@ -96,6 +104,16 @@ After setup copies it into `<project>/.claude/plugins/orchestrator-budget`:
 /plugin install orchestrator-budget
 ```
 
+## Mock play (GitHub Pages)
+
+The installer GUI is also hosted as a static page at https://erscheinung.github.io/opus-sonnet-conductor/ . On `*.github.io` (or with `?mock`) it swaps the Python backend for an in-memory mock, so you can click through scopes, plugins, MCP toggles, CLAUDE.md view, context usage, and a simulated install. **Nothing is read or written** — a red MOCK PLAY ribbon says so. For the real thing run `launch-installer.command`.
+
+```bash
+npm install
+npm run deploy     # builds dist/ and publishes it to the gh-pages branch
+npm run preview    # local check at http://localhost:8080
+```
+
 ## Usage
 
 Invoke the skill in a session:
@@ -118,7 +136,8 @@ The subagent frontmatter uses the generic `sonnet` / `haiku` aliases, which reso
 
 ## Limitations
 
-- No per-Agent-call model override — model and effort are per subagent definition. Effort is controlled by choosing the worker variant.
+- Effort is per subagent definition (model can be set per call). Effort is controlled by choosing the worker variant.
+- If `CLAUDE_CODE_SUBAGENT_MODEL` is set anywhere, it overrides every agent — `setup.sh` warns, `route-guard` flags it.
 - The budget gate is advisory (warn + soft-gate). Claude Code has no native "stop at X euros" that kills a session; the hook injects context and the orchestrator is instructed to checkpoint and hold.
 - The cost hook is macOS-specific (reads the provider refresh token from the macOS keychain).
 - `setup.ps1` (Windows) is not yet ported.

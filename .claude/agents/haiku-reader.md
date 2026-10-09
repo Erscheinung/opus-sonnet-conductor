@@ -6,7 +6,7 @@ description: >
   summarize a config or file — before planning or delegating implementation.
   Runs on Haiku at low effort. Returns compressed file:line findings, never
   fixes or edits. Route reads here to keep the orchestrator context lean.
-model: claude-haiku-4-5
+model: haiku
 effort: low
 tools: Read, Grep, Glob, Bash
 disallowedTools: Write, Edit

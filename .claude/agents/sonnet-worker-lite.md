@@ -6,7 +6,7 @@ description: >
   small localized edits, format-preserving tweaks, applying an obvious fix across
   a named file. Runs on Sonnet at medium effort in an isolated fresh context.
   Escalate to sonnet-worker when the change has real design judgement in it.
-model: claude-sonnet-4-6
+model: sonnet
 effort: medium
 tools: Read, Edit, Write, Grep, Glob, Bash
 ---

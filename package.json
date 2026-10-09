@@ -1,0 +1,15 @@
+{
+  "name": "opus-sonnet-conductor",
+  "version": "1.1.0",
+  "private": true,
+  "description": "Opus/Sonnet adaptive orchestrator for Claude Code, with a GUI installer (mock-playable on GitHub Pages).",
+  "scripts": {
+    "build": "node scripts/build-pages.js",
+    "test": "node tests/test_task_budget.js && node tests/test_route_guard.js",
+    "deploy": "npm run build && gh-pages -d dist -m \"deploy: GUI mock-play\"",
+    "preview": "npm run build && python3 -m http.server 8080 -d dist"
+  },
+  "devDependencies": {
+    "gh-pages": "^6.3.0"
+  }
+}

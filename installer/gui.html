@@ -624,8 +624,85 @@ function el(tag, props, children) {
 
 function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
 
+/* ---------------- mock backend (GitHub Pages / ?mock) ----------------
+   The real installer talks to installer/server.py. On a static host there is
+   no backend, so every /api call is answered here from in-memory state and
+   nothing is ever written. */
+const MOCK = /\.github\.io$/.test(location.hostname) || location.protocol === "file:" || /[?&]mock\b/.test(location.search);
+const mockDb = {
+  scopes: ["/Users/you/Code/web-app", "/Users/you/Code/api-service", "/Users/you/Code/opus-sonnet-conductor"],
+  found: { "adaptive-orchestrator": true, "no-subagents": false, "haiku-reader": true, "sonnet-worker": false, "sonnet-worker-lite": false, "route-guard": false },
+  mcp: { global: { github: false, linear: true, "claude-in-chrome": false }, dir: { postgres: false, sentry: true } },
+  plugins: { global: { "orchestrator-budget@local": true, "caveman@caveman": true, "figma@claude-plugins": false }, dir: { "orchestrator-budget@local": false } },
+};
+const COMPONENT_PATHS = {
+  "adaptive-orchestrator": ".claude/skills/adaptive-orchestrator/SKILL.md",
+  "no-subagents": ".claude/skills/no-subagents/SKILL.md",
+  "haiku-reader": ".claude/agents/haiku-reader.md",
+  "sonnet-worker": ".claude/agents/sonnet-worker.md",
+  "sonnet-worker-lite": ".claude/agents/sonnet-worker-lite.md",
+  "route-guard": ".claude/hooks/route-guard.js",
+};
+function mockQs(path) {
+  const q = new URLSearchParams(path.split("?")[1] || "");
+  return { scope: q.get("scope") || "global", dir: q.get("dir") };
+}
+function mockApi(path, body) {
+  const route = path.split("?")[0];
+  const { scope, dir } = mockQs(path);
+  const b = body || {};
+  const bucket = (scope === "dir" && dir) ? "dir" : "global";
+  const delay = (v, ms) => new Promise((r) => setTimeout(() => r(v), ms || 120));
+  if (route === "/api/state") {
+    const comps = Object.keys(COMPONENT_PATHS).map((n) => ({ name: n, path: "~/" + COMPONENT_PATHS[n], found: !!mockDb.found[n] }));
+    return delay({
+      scope, directory: dir, scopes: mockDb.scopes, components: comps,
+      costHook: { found: !!mockDb.plugins.global["orchestrator-budget@local"] },
+      bd: true, node: { found: true, version: "v22.4.0" },
+      mcpServers: Object.keys(mockDb.mcp[bucket]).map((n) => ({ name: n, disabled: mockDb.mcp[bucket][n] })),
+      plugins: Object.keys(mockDb.plugins[bucket]).map((id) => ({ id, enabled: mockDb.plugins[bucket][id] })),
+      defaultTarget: "/Users/you/Code/my-project",
+    });
+  }
+  if (route === "/api/toggle-mcp") { mockDb.mcp[bucket][b.name] = !!b.disabled; return delay({ ok: true }); }
+  if (route === "/api/toggle-plugin") { mockDb.plugins[bucket][b.id] = !!b.enabled; return delay({ ok: true }); }
+  if (route === "/api/pick-folder") return delay({ ok: true, path: "/Users/you/Code/picked-folder" });
+  if (route === "/api/open") return delay({ ok: false, error: "mock mode — no files on disk" });
+  if (route === "/api/claude-md") {
+    const base = bucket === "dir" ? dir : "~/.claude";
+    return delay({ ok: true, files: [
+      { label: bucket === "dir" ? "project CLAUDE.md" : "global CLAUDE.md", path: base + "/CLAUDE.md", exists: true, lines: 42 },
+      { label: bucket === "dir" ? "project AGENTS.md" : "global settings", path: base + (bucket === "dir" ? "/AGENTS.md" : "/settings.json"), exists: bucket === "dir" ? false : true, lines: 18 },
+    ] });
+  }
+  if (route === "/api/context") {
+    return delay({ ok: true, raw: "", categories: [
+      { category: "System prompt", tokens: "6.1k", pct: "3.0%" }, { category: "System tools", tokens: "14.8k", pct: "7.4%" },
+      { category: "Custom agents", tokens: "0.9k", pct: "0.5%" }, { category: "Skills", tokens: "2.3k", pct: "1.2%" },
+      { category: "Messages", tokens: "38.0k", pct: "19.0%" }, { category: "Free space", tokens: "137.9k", pct: "69.0%" },
+    ] }, 900);
+  }
+  if (route === "/api/install") {
+    (b.components || []).forEach((c) => { mockDb.found[c] = true; });
+    const lines = ["Installing adaptive orchestrator into: " + b.target + "  (MOCK — nothing written)", ""]
+      .concat((b.components || []).map((c) => "  Installed: " + (COMPONENT_PATHS[c] || c)))
+      .concat(["  Checkpoint store set to: " + b.checkpoints, b.costHook ? "  Installed plugin: orchestrator-budget" : "", "", "Done."]);
+    return delay({ ok: true, code: 0, log: lines.join("\n") + "\n" }, 700);
+  }
+  return delay({ ok: false, error: "not found" });
+}
+if (MOCK) {
+  document.addEventListener("DOMContentLoaded", () => {
+    const r = document.createElement("div");
+    r.textContent = "MOCK PLAY — simulated backend. Nothing is read or written. Clone the repo and run launch-installer.command for the real installer.";
+    r.style.cssText = "position:sticky;top:0;z-index:50;padding:8px 14px;background:#e30613;color:#fff;font:600 12px/1.4 ui-monospace,Menlo,monospace;letter-spacing:.04em";
+    document.body.insertBefore(r, document.body.firstChild);
+  });
+}
+
 /* ---------------- api ---------------- */
 async function api(path, body) {
+  if (MOCK) return mockApi(path, body);
   const opts = body === undefined
     ? { method: "GET" }
     : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };

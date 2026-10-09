@@ -160,25 +160,22 @@ maybe_pin_gateway_models() {
     return 0
   fi
 
-  # Determine which model-family pins are available from modelOverrides keys.
-  local sonnet_pin haiku_pin
-  sonnet_pin="$(node -e "
+  # Pick the newest modelOverrides key per family (any version, e.g. claude-sonnet-5-5).
+  local pins sonnet_pin haiku_pin
+  pins="$(SETTINGS_FILE="$settings" node -e "
     try {
-      var o = JSON.parse(require('fs').readFileSync('$settings','utf8'));
-      var m = o.modelOverrides || {};
-      if (Object.prototype.hasOwnProperty.call(m,'claude-sonnet-4-6'))
-        process.stdout.write('claude-sonnet-4-6');
-    } catch(e) {}
+      var o = JSON.parse(require('fs').readFileSync(process.env.SETTINGS_FILE,'utf8'));
+      var keys = Object.keys(o.modelOverrides || {});
+      var newest = function (fam) {
+        var m = keys.filter(function (k) { return k.indexOf(fam) !== -1; });
+        m.sort(function (a, b) { return a.localeCompare(b, undefined, {numeric: true}); });
+        return m.length ? m[m.length - 1] : '';
+      };
+      process.stdout.write(newest('sonnet') + ' ' + newest('haiku'));
+    } catch (e) {}
   " 2>/dev/null)"
-
-  haiku_pin="$(node -e "
-    try {
-      var o = JSON.parse(require('fs').readFileSync('$settings','utf8'));
-      var m = o.modelOverrides || {};
-      if (Object.prototype.hasOwnProperty.call(m,'claude-haiku-4-5'))
-        process.stdout.write('claude-haiku-4-5');
-    } catch(e) {}
-  " 2>/dev/null)"
+  sonnet_pin="$(echo "$pins" | awk '{print $1}')"
+  haiku_pin="$(echo "$pins" | awk '{print $2}')"
 
   # Nothing to do if neither pin resolved.
   [[ -z "$sonnet_pin" && -z "$haiku_pin" ]] && return 0
@@ -198,6 +195,33 @@ maybe_pin_gateway_models() {
 }
 
 maybe_pin_gateway_models "$AGENTS_DEST_DIR"
+
+# --- route-guard hook (cost tiering enforcement) ----------------------------
+# Generic subagent spawns inherit the parent (Opus) model. The guard rewrites
+# every Agent/Task call to the cheapest fitting tier. Registered in the
+# settings.json of the install scope.
+
+install_route_guard() {
+  local base="$1"   # directory that holds .claude/
+  local hook_dir="$base/.claude/hooks" settings="$base/.claude/settings.json"
+  command -v node >/dev/null 2>&1 || { echo "  (node not found; route-guard NOT installed — subagents may inherit Opus)"; return 0; }
+  mkdir -p "$hook_dir"
+  cp "$PLUGIN_SRC/hooks/route-guard.js" "$hook_dir/route-guard.js"
+  SETTINGS_FILE="$settings" HOOK_CMD="node \"$hook_dir/route-guard.js\"" node -e "
+    var fs = require('fs'), f = process.env.SETTINGS_FILE, cmd = process.env.HOOK_CMD;
+    var o = {}; try { o = JSON.parse(fs.readFileSync(f, 'utf8')); } catch (e) {}
+    o.hooks = o.hooks || {}; var arr = o.hooks.PreToolUse = o.hooks.PreToolUse || [];
+    var has = arr.some(function (g) { return (g.hooks || []).some(function (h) { return /route-guard\.js/.test(h.command || ''); }); });
+    if (!has) arr.push({ matcher: 'Agent|Task', hooks: [{ type: 'command', command: cmd, timeout: 5 }] });
+    fs.writeFileSync(f, JSON.stringify(o, null, 2) + '\n');
+  "
+  echo "  Installed route-guard: $hook_dir/route-guard.js (registered in $settings)"
+}
+
+if want_component "route-guard"; then install_route_guard "$TARGET"; fi
+if [[ -n "${CLAUDE_CODE_SUBAGENT_MODEL:-}" ]]; then
+  echo "  WARNING: CLAUDE_CODE_SUBAGENT_MODEL=$CLAUDE_CODE_SUBAGENT_MODEL is set in this shell; it overrides all per-agent models. Unset it."
+fi
 
 # --- checkpoint store choice -------------------------------------------------
 
@@ -305,6 +329,7 @@ if $GLOBAL; then
   cp "$NOSUB_SRC" "$GLOBAL_SKILLS/no-subagents/SKILL.md"
   for f in "$AGENTS_DIR_SRC"/*.md; do cp "$f" "$GLOBAL_AGENTS/$(basename "$f")"; done
   maybe_pin_gateway_models "$GLOBAL_AGENTS"
+  if want_component "route-guard"; then install_route_guard "$HOME"; fi
   echo "  Installed skill + no-subagents + agents globally."
   echo "  Merge AGENTS.md routing rules into ~/.claude/CLAUDE.md manually if you want them everywhere."
 fi

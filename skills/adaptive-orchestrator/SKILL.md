@@ -21,7 +21,32 @@ Route work by actual complexity, not habit. The primary Opus session owns scope,
 | Implement | `sonnet-worker` (Sonnet, high) / `sonnet-worker-lite` (Sonnet, medium) | Bounded implementation with testable acceptance criteria |
 | Plan | Opus (this session) | Hard planning, ambiguous diagnosis, architecture, turning a vague brief into a scoped plan, delegating, synthesizing worker reports |
 
-Model and effort are pinned in each agent's definition (`agents/*.md`). There is no per-call model override in Claude Code, so **the worker variant IS the effort lever**: pick `sonnet-worker-lite` (medium) for low-risk mechanical edits, `sonnet-worker` (high) for work with real implementation judgement. The fine control is the brief (see below).
+Model and effort are pinned in each agent's definition (`agents/*.md`). The Agent call's `model` parameter can override the model per call, but effort is fixed per definition, so **the worker variant IS the effort lever**: pick `sonnet-worker-lite` (medium) for low-risk mechanical edits, `sonnet-worker` (high) for work with real implementation judgement. The fine control is the brief (see below).
+
+## Spawning: always name the tier (this is what keeps subagents off Opus)
+
+A subagent's model resolves as: `CLAUDE_CODE_SUBAGENT_MODEL` env > the Agent call's `model` > the agent file's `model:` > **the parent's model**. A spawn with no `subagent_type` (or `general-purpose` / `claude` / fork) has no frontmatter, so it runs on Opus and costs Opus rates. Every Agent call therefore sets both fields:
+
+| Work | `subagent_type` | `model` |
+|---|---|---|
+| Read / locate / summarize | `haiku-reader` | `haiku` |
+| Mechanical, low-risk edit | `sonnet-worker-lite` | `sonnet` |
+| Bounded implementation | `sonnet-worker` | `sonnet` |
+
+Never pass `model: opus` or `inherit` to a worker. A `route-guard` PreToolUse hook rewrites stray spawns to the right tier and logs them to `~/.config/orchestrator-budget/routing-log.jsonl`; do not rely on it — set the fields yourself.
+
+## Cost-aware delegation (decide before you spawn)
+
+Delegation is not free: every subagent starts cold (system prompt + tool schemas + brief, mostly uncached on the first call), and multi-agent runs use several times the tokens of a single thread. Delegate only when it wins:
+
+1. **Delegate when** the work reads/produces a lot the parent would otherwise carry (many-file search, long implementation, test-fix loops), or independent pieces can run in parallel.
+2. **Do it inline when** you already hold the context and the job is under ~3 tool calls or one small edit. A spawn costs more than the edit.
+3. **Cheapest tier that passes the gate.** Try Haiku for anything read-only. Use `-lite` unless the change needs design judgement. Escalate one tier only after a worker reports a blocker — never start high "to be safe".
+4. **Batch.** One worker with a 3-part brief beats three workers each re-paying cold start. Fan out in parallel only for truly independent scopes, max ~3 at a time.
+5. **Cap the output.** Ask for a report under ~150 words and `file:line` findings; the report is what lands in the Opus context.
+6. **Don't let the Opus context grow.** Cost compounds per turn with context size. Past ~50% full, checkpoint and continue in a fresh session/worker; run `/compact` between phases.
+7. **Reasoning effort is spend.** Opus runs at medium effort unless the task is architecture or ambiguous diagnosis.
+8. **Check the meter.** If the spend line is climbing faster than the work, stop spawning and inspect `routing-log.jsonl` for any `changed: true` rows — those are spawns you mis-specified.
 
 ## Routing rules
 

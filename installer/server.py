@@ -25,6 +25,7 @@ COMPONENTS = [
     ("haiku-reader", ".claude/agents/haiku-reader.md"),
     ("sonnet-worker", ".claude/agents/sonnet-worker.md"),
     ("sonnet-worker-lite", ".claude/agents/sonnet-worker-lite.md"),
+    ("route-guard", ".claude/hooks/route-guard.js"),
 ]
 
 

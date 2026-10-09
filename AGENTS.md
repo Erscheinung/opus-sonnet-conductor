@@ -5,10 +5,16 @@ Route work by actual complexity across three model tiers. The primary Opus sessi
 ## Tiers
 
 - **Haiku** (`haiku-reader` agent) — locating symbols, mapping files, summarizing config, gathering context. Route reads here before planning; do not burn Opus context locating things.
-- **Sonnet** (`sonnet-worker` = high effort, `sonnet-worker-lite` = medium) — bounded implementation with testable acceptance criteria. The variant is the effort lever (effort is fixed per agent definition; no per-call override).
+- **Sonnet** (`sonnet-worker` = high effort, `sonnet-worker-lite` = medium) — bounded implementation with testable acceptance criteria. The variant is the effort lever (effort is fixed per agent definition).
 - **Opus** (this session) — hard planning, ambiguous diagnosis, architecture, turning a vague brief into a scoped plan, delegating, synthesizing worker reports.
 
 Model and effort are pinned in `.claude/agents/*.md`.
+
+## Spawning rule (prevents Opus-only subagents)
+
+Subagent model = env `CLAUDE_CODE_SUBAGENT_MODEL` > Agent-call `model` > agent frontmatter > parent. Always pass `subagent_type` **and** `model` on every Agent call (`haiku-reader`/`haiku`, `sonnet-worker-lite`/`sonnet`, `sonnet-worker`/`sonnet`); never `general-purpose`, never `opus`/`inherit` for workers. A `route-guard` hook enforces this and logs to `~/.config/orchestrator-budget/routing-log.jsonl`.
+
+Delegate only when it pays: skip delegation for <3-tool-call jobs you already hold context for; batch related work into one brief; cap parallel fan-out at ~3; ask for reports under ~150 words; escalate a tier only after a reported blocker.
 
 ## Information diet
 
