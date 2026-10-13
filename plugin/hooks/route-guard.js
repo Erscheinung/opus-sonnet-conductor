@@ -46,6 +46,10 @@ function decideRoute(input, env = {}, spawnCount = 0) {
   const before = { subagent_type: type, model: inp.model || null };
   const notes = [];
 
+  if (/\[solo\]/i.test(inp.description || '') || /\[solo\]/i.test(inp.prompt || '')) {
+    return { updatedInput: inp, notes: ['[solo] — tiering bypassed'], changed: false, before };
+  }
+
   if (env.CLAUDE_CODE_SUBAGENT_MODEL) {
     notes.push(
       `CLAUDE_CODE_SUBAGENT_MODEL=${env.CLAUDE_CODE_SUBAGENT_MODEL} is set and overrides every ` +
